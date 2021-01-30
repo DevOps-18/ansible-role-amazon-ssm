@@ -1,0 +1,40 @@
+name: macos_test
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: '0 18 * * sun'
+
+jobs:
+  macos_test:
+    name: macos test
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up Python 3.8
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.8
+
+      - name: Setup Ansible
+        run: |
+          python -m pip install --upgrade pip
+          pip install ansible ansible-lint yamllint
+          mkdir -p ~/.ansible/roles/ && cp -r ../ansible-role-amazon-ssm ~/.ansible/roles/ansible-role-amazon-ssm
+          echo "localhost ansible_connection=local" > ansible-hosts
+
+      - name: Test Ansible role
+        run: |
+          set -e
+          sudo ansible-playbook tests/test.yml 
+          sudo ansible-playbook tests/test.yml | grep -q 'changed=0.*failed=0' && (echo 'Idempotence test: pass' && exit 0) || (echo 'Idempotence test: fail' && exit 1)
+          sudo ansible-playbook molecule/macos/verify.yml -i ansible-hosts
+
+      - name: Test Ansible role with check_mode enable
+        run: |
+          set -e
+          sudo ansible-playbook --check tests/test.yml
